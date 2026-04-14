@@ -201,7 +201,8 @@ export class GradingEngine {
     return () => { this.listeners = this.listeners.filter(l => l !== listener); };
   }
 
-  private emit(type: EngineEventType, data: Record<string, unknown> = {}) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private emit(type: EngineEventType, data: any = {}) {
     const event: EngineEvent = { type, timestamp: Date.now(), data };
     this.listeners.forEach(l => l(event));
   }
