@@ -167,6 +167,7 @@ export type EngineEventType =
 
 export interface EngineEvent {
   type: EngineEventType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   timestamp: number;
   data: Record<string, unknown>;
 }
