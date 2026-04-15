@@ -8,6 +8,11 @@ import Index from "./pages/Index";
 import GradingDemo from "./pages/GradingDemo";
 import ArchitecturePage from "./pages/ArchitecturePage";
 import MetricsPage from "./pages/MetricsPage";
+import UsersPage from "./pages/UsersPage";
+import ExamsPage from "./pages/ExamsPage";
+import QuestionBankPage from "./pages/QuestionBankPage";
+import FraudDetectionPage from "./pages/FraudDetectionPage";
+import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +29,11 @@ const App = () => (
             <Route path="/grading-demo" element={<GradingDemo />} />
             <Route path="/architecture" element={<ArchitecturePage />} />
             <Route path="/metrics" element={<MetricsPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/exams" element={<ExamsPage />} />
+            <Route path="/question-bank" element={<QuestionBankPage />} />
+            <Route path="/fraud-detection" element={<FraudDetectionPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

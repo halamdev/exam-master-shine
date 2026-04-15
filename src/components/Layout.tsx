@@ -1,29 +1,28 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { 
-  LayoutDashboard, Play, Network, BarChart3, 
+import {
+  LayoutDashboard, Play, Network, BarChart3,
   Users, FileText, BookOpen, Shield, Settings,
   GraduationCap
 } from "lucide-react";
 
 const mainNav = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/grading-demo", icon: Play, label: "Demo Chấm Bài" },
+  { to: "/grading-demo", icon: Play, label: "Chấm Bài" },
   { to: "/architecture", icon: Network, label: "Kiến Trúc" },
-  { to: "/metrics", icon: BarChart3, label: "Metrics" },
+  { to: "/metrics", icon: BarChart3, label: "Kiểm thử Hiệu năng" },
 ];
 
 const managementNav = [
-  { to: "#", icon: Users, label: "Quản lý Người dùng" },
-  { to: "#", icon: BookOpen, label: "Quản lý Kỳ thi" },
-  { to: "#", icon: FileText, label: "Ngân hàng Đề thi" },
-  { to: "#", icon: Shield, label: "Phát hiện Gian lận" },
-  { to: "#", icon: Settings, label: "Cài đặt Hệ thống" },
+  { to: "/users", icon: Users, label: "Quản lý Người dùng" },
+  { to: "/exams", icon: BookOpen, label: "Quản lý Kỳ thi" },
+  { to: "/question-bank", icon: FileText, label: "Ngân hàng Đề thi" },
+  { to: "/fraud-detection", icon: Shield, label: "Phát hiện Gian lận" },
+  { to: "/settings", icon: Settings, label: "Cài đặt Hệ thống" },
 ];
 
 export default function Layout() {
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
       <aside className="w-64 flex-shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
         <div className="p-5 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5">
@@ -40,7 +39,7 @@ export default function Layout() {
         <nav className="flex-1 overflow-y-auto p-3 space-y-6">
           <div>
             <p className="text-[10px] uppercase tracking-wider text-sidebar-muted font-semibold px-3 mb-2">
-              Demo
+              Hệ thống
             </p>
             <div className="space-y-0.5">
               {mainNav.map(item => (
@@ -69,14 +68,20 @@ export default function Layout() {
             </p>
             <div className="space-y-0.5">
               {managementNav.map(item => (
-                <div
-                  key={item.label}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-sidebar-muted cursor-not-allowed opacity-60"
-                  title="Chức năng demo - chưa triển khai"
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-primary font-medium"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                    }`
+                  }
                 >
                   <item.icon className="w-4 h-4" />
                   {item.label}
-                </div>
+                </NavLink>
               ))}
             </div>
           </div>
@@ -89,7 +94,6 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
