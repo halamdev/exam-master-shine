@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Play, Network, BarChart3, Cpu, Database, Layers, Zap, Shield } from "lucide-react";
+import { Play, Network, BarChart3, Cpu, Database, Layers, Zap, Shield, Users, Settings } from "lucide-react";
 
 const features = [
   {
@@ -30,8 +30,13 @@ const features = [
 
 const quickActions = [
   { to: "/grading-demo", icon: Play, label: "Chạy Demo Chấm Bài", desc: "Sinh dữ liệu và chấm bài với Master-Slave" },
-  { to: "/architecture", icon: Network, label: "Xem Kiến Trúc", desc: "Component diagram & luồng xử lý" },
-  { to: "/metrics", icon: BarChart3, label: "So Sánh Metrics", desc: "Benchmark 1 vs 3 workers" },
+  // { to: "/architecture", icon: Network, label: "Xem Kiến Trúc", desc: "Component diagram & luồng xử lý" },
+  { to: "/metrics", icon: BarChart3, label: "Kiểm Thử Hiệu Năng", desc: "Stress test & Benchmark" },
+  { to: "/exams", icon: Database, label: "Quản lý Kỳ Thi", desc: "Tạo, chỉnh sửa và quản lý các kỳ thi" },
+  { to: "/question-bank", icon: Layers, label: "Ngân Hàng Đề Thi", desc: "Thư viện câu hỏi, đề thi mẫu" },
+  { to: "/users", icon: Users, label: "Quản lý Người Dùng", desc: "Quản lý giảng viên, sinh viên" },
+  { to: "/fraud-detection", icon: Shield, label: "Phát Hiện Gian Lận", desc: "Giám sát và báo cáo hành vi gian lận" },
+  { to: "/settings", icon: Settings, label: "Cài Đặt Hệ Thống", desc: "Cấu hình và tùy chỉnh ứng dụng" },
 ];
 
 export default function DashboardPage() {
@@ -40,26 +45,11 @@ export default function DashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Hệ thống Thi Trực tuyến</h1>
-        <p className="text-muted-foreground mt-1">
-          Demo kiến trúc Master-Slave cho module chấm bài phân tán
-        </p>
-      </div>
-
-      {/* Architecture Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {features.map(f => (
-          <div key={f.title} className="stat-card">
-            <f.icon className={`w-8 h-8 ${f.color} mb-3`} />
-            <h3 className="font-semibold text-foreground text-sm">{f.title}</h3>
-            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{f.description}</p>
-          </div>
-        ))}
       </div>
 
       {/* Quick Actions */}
       <div>
-        <h2 className="text-lg font-semibold text-foreground mb-3">Bắt đầu</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {quickActions.map(a => (
             <Link
               key={a.to}
@@ -75,34 +65,6 @@ export default function DashboardPage() {
               </div>
             </Link>
           ))}
-        </div>
-      </div>
-
-      {/* Architecture Summary */}
-      <div className="glass-card p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Database className="w-5 h-5 text-primary" />
-          Tổng quan Kiến trúc
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-          <div>
-            <h4 className="font-medium text-foreground mb-2">Client Layer</h4>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Giao diện làm bài, dashboard giảng viên. Giao tiếp REST API với Master.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-medium text-foreground mb-2">Master Layer</h4>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Coordinator nhận bài, phân tích, chia task. Aggregator tổng hợp kết quả.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-medium text-foreground mb-2">Slave Layer</h4>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              MCQ Worker, Essay Worker, Fraud Worker xử lý song song qua Redis Queue.
-            </p>
-          </div>
         </div>
       </div>
     </div>

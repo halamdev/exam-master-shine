@@ -8,7 +8,7 @@ import {
 const mainNav = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/grading-demo", icon: Play, label: "Chấm Bài" },
-  { to: "/architecture", icon: Network, label: "Kiến Trúc" },
+  // { to: "/architecture", icon: Network, label: "Kiến Trúc" },
   { to: "/metrics", icon: BarChart3, label: "Kiểm thử Hiệu năng" },
 ];
 

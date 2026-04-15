@@ -22,14 +22,55 @@ export const CORPUS_PHRASES = [
   "microservices architecture decomposes applications",
 ];
 
-export function generateRandomAnswers(numQuestions: number): string[] {
+/**
+ * Generate fixed correct answers based on seed (deterministic)
+ * Same correct answers will always be generated for same numQuestions
+ */
+function getFixedCorrectAnswers(numQuestions: number): string[] {
   const options = ['A', 'B', 'C', 'D'];
-  return Array.from({ length: numQuestions }, () => options[Math.floor(Math.random() * 4)]);
+  const answers: string[] = [];
+  for (let i = 0; i < numQuestions; i++) {
+    // Seed-based: use index modulo to generate deterministic answers
+    answers.push(options[i % 4]);
+  }
+  return answers;
 }
 
-export function generateCorrectAnswers(numQuestions: number): string[] {
+/**
+ * Generate student answers: mix of correct (60-70%) and random (30-40%)
+ * This simulates realistic exam performance
+ */
+export function generateRandomAnswers(
+  numQuestions: number,
+  correctAnswers: string[] | undefined,
+  correctnessRate: number = 0.65 // 65% of answers are correct
+): string[] {
   const options = ['A', 'B', 'C', 'D'];
-  return Array.from({ length: numQuestions }, () => options[Math.floor(Math.random() * 4)]);
+  const answers: string[] = [];
+  
+  if (!correctAnswers) {
+    // Fallback: 100% random if no correct answers provided
+    return Array.from({ length: numQuestions }, () => options[Math.floor(Math.random() * 4)]);
+  }
+
+  for (let i = 0; i < numQuestions; i++) {
+    if (Math.random() < correctnessRate) {
+      // Match correct answer
+      answers.push(correctAnswers[i] || options[Math.floor(Math.random() * 4)]);
+    } else {
+      // Wrong answer: pick different from correct
+      const wrongOptions = options.filter(opt => opt !== correctAnswers[i]);
+      answers.push(wrongOptions[Math.floor(Math.random() * wrongOptions.length)]);
+    }
+  }
+  return answers;
+}
+
+/**
+ * Get fixed correct answers for MCQ exam
+ */
+export function generateCorrectAnswers(numQuestions: number): string[] {
+  return getFixedCorrectAnswers(numQuestions);
 }
 
 export function generateEssayContent(wordCount: number, plagiarismChance: number): string {
@@ -64,12 +105,21 @@ export function generateSubmissions(
   const examId = genId('exam');
   const correctAnswersMap = new Map<string, string[]>();
 
+  let correctAnswers: string[] | undefined;
   if (examType === 'MCQ' || examType === 'MIXED') {
-    correctAnswersMap.set(examId, generateCorrectAnswers(questionsPerExam));
+    correctAnswers = generateCorrectAnswers(questionsPerExam);
+    correctAnswersMap.set(examId, correctAnswers);
   }
 
   const submissions: Submission[] = [];
   for (let i = 0; i < count; i++) {
+    let studentAnswers: string[] = [];
+    
+    if (examType === 'MCQ' || examType === 'MIXED') {
+      const correctnessRate = 0.55 + Math.random() * 0.2; // 55% to 75% correct
+      studentAnswers = generateRandomAnswers(questionsPerExam, correctAnswers, correctnessRate);
+    }
+
     const sub: Submission = {
       id: genId('sub'),
       studentId: genId('student'),
@@ -78,10 +128,10 @@ export function generateSubmissions(
       type: examType,
       status: 'PENDING',
       content: examType === 'MCQ'
-        ? { answers: generateRandomAnswers(questionsPerExam) }
+        ? { answers: studentAnswers }
         : examType === 'ESSAY'
         ? { text: generateEssayContent(500, 0.3) }
-        : { answers: generateRandomAnswers(questionsPerExam), text: generateEssayContent(300, 0.25) },
+        : { answers: studentAnswers, text: generateEssayContent(300, 0.25) },
       submittedAt: Date.now(),
       taskIds: [],
     };
