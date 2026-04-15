@@ -1,54 +1,33 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { GradingEngine, type EngineEvent, type EngineMetrics, type QueueStats, type Worker as WorkerType, type ExamType, type GradingEngineConfig } from "@/lib/grading-engine";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { GradingEngine, type EngineMetrics, type Submission, type ExamType } from "@/lib/grading";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Play, Square, RotateCcw, Zap, AlertTriangle, 
-  CheckCircle2, XCircle, Clock, Cpu, Database, 
-  ArrowRight, Skull, Heart
+import {
+  Play, RotateCcw, CheckCircle2, AlertTriangle,
+  FileSearch, Eye, Flag, Download
 } from "lucide-react";
+
+type ViewTab = 'results' | 'violations';
 
 export default function GradingDemo() {
   const engineRef = useRef<GradingEngine | null>(null);
   const [metrics, setMetrics] = useState<EngineMetrics | null>(null);
-  const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
-  const [workers, setWorkers] = useState<WorkerType[]>([]);
-  const [events, setEvents] = useState<EngineEvent[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [activeTab, setActiveTab] = useState<ViewTab>('results');
 
-  // Config
-  const [submissionCount, setSubmissionCount] = useState(500);
-  const [examType, setExamType] = useState<ExamType>('MCQ');
-  const [mcqWorkers, setMcqWorkers] = useState(3);
-  const [essayWorkers, setEssayWorkers] = useState(2);
-  const [fraudWorkers, setFraudWorkers] = useState(1);
-  const [enableFaults, setEnableFaults] = useState(false);
-
-  const eventsEndRef = useRef<HTMLDivElement>(null);
+  // Simple config
+  const [submissionCount, setSubmissionCount] = useState(200);
+  const [examType, setExamType] = useState<ExamType>('MIXED');
 
   const refreshState = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
     setMetrics(engine.getMetrics());
-    setQueueStats(engine.getQueueStats());
-    setWorkers(engine.getWorkers());
-  }, []);
-
-  const handleEvent = useCallback((event: EngineEvent) => {
-    setEvents(prev => {
-      const next = [...prev, event];
-      return next.length > 200 ? next.slice(-200) : next;
-    });
-    if (event.type === 'engine_complete') {
-      setIsComplete(true);
-      setIsRunning(false);
-    }
-    if (event.type === 'metrics_update') {
-      setMetrics(event.data as unknown as EngineMetrics);
-    }
+    setSubmissions(engine.getSubmissions());
   }, []);
 
   useEffect(() => {
@@ -57,127 +36,113 @@ export default function GradingDemo() {
 
   useEffect(() => {
     if (isRunning) {
-      const interval = setInterval(refreshState, 300);
+      const interval = setInterval(refreshState, 500);
       return () => clearInterval(interval);
     }
   }, [isRunning, refreshState]);
 
-  useEffect(() => {
-    eventsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [events.length]);
-
   const handleStart = () => {
-    const config: Partial<GradingEngineConfig> = {
-      workerCount: { mcq: mcqWorkers, essay: essayWorkers, fraud: fraudWorkers },
-      enableFaultSimulation: enableFaults,
-      faultProbability: 0.08,
-    };
-
-    const engine = new GradingEngine(config);
+    const engine = new GradingEngine({
+      workerCount: { mcq: 3, essay: 2, fraud: 1 },
+    });
     engineRef.current = engine;
 
-    engine.on(handleEvent);
+    engine.on(event => {
+      if (event.type === 'engine_complete') {
+        setIsComplete(true);
+        setIsRunning(false);
+        setMetrics(engine.getMetrics());
+        setSubmissions(engine.getSubmissions());
+      }
+      if (event.type === 'metrics_update') {
+        setMetrics(event.data as unknown as EngineMetrics);
+      }
+    });
+
     engine.generateSubmissions(submissionCount, examType);
-    
-    setEvents([]);
     setIsComplete(false);
     setIsRunning(true);
+    setSubmissions([]);
     engine.start();
     refreshState();
   };
 
-  const handleStop = () => {
-    engineRef.current?.stop();
-    setIsRunning(false);
-    refreshState();
-  };
-
   const handleReset = () => {
-    engineRef.current?.reset();
-    setEvents([]);
+    engineRef.current?.stop();
+    engineRef.current = null;
     setMetrics(null);
-    setQueueStats(null);
-    setWorkers([]);
+    setSubmissions([]);
     setIsRunning(false);
     setIsComplete(false);
   };
 
-  const handleKillWorker = (workerId: string) => {
-    engineRef.current?.killWorker(workerId);
-    refreshState();
-  };
+  const progress = metrics
+    ? (metrics.totalSubmissions > 0 ? (metrics.completedSubmissions / metrics.totalSubmissions) * 100 : 0)
+    : 0;
 
-  const handleReviveWorker = (workerId: string) => {
-    engineRef.current?.reviveWorker(workerId);
-    refreshState();
-  };
+  const completedSubs = submissions.filter(s => s.status === 'COMPLETED');
+  const violationSubs = completedSubs.filter(
+    s => (s.plagiarismScore && s.plagiarismScore > 0.25) || s.fraudFlag
+  );
 
-  const progress = metrics ? (metrics.totalSubmissions > 0 ? (metrics.completedSubmissions / metrics.totalSubmissions) * 100 : 0) : 0;
+  const avgScore = completedSubs.length > 0
+    ? completedSubs.reduce((sum, s) => sum + (s.score || 0), 0) / completedSubs.length
+    : 0;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 animate-slide-in">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Demo Chấm Bài</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Mô phỏng kiến trúc Master-Slave với message queue</p>
+          <h1 className="text-2xl font-bold text-foreground">Chấm Bài Thi</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Mô phỏng luồng nộp bài → phân tách → chấm điểm → tổng hợp kết quả
+          </p>
         </div>
         <div className="flex gap-2">
           {!isRunning && !isComplete && (
             <Button onClick={handleStart} className="gap-2">
-              <Play className="w-4 h-4" /> Bắt đầu Chấm
+              <Play className="w-4 h-4" /> Bắt đầu Chấm bài
             </Button>
           )}
-          {isRunning && (
-            <Button onClick={handleStop} variant="destructive" className="gap-2">
-              <Square className="w-4 h-4" /> Dừng
+          {(isRunning || isComplete) && (
+            <Button onClick={handleReset} variant="outline" className="gap-2">
+              <RotateCcw className="w-4 h-4" /> Làm mới
             </Button>
           )}
-          <Button onClick={handleReset} variant="outline" className="gap-2">
-            <RotateCcw className="w-4 h-4" /> Reset
-          </Button>
         </div>
       </div>
 
-      {/* Config Panel */}
+      {/* Config - only before start */}
       {!isRunning && !isComplete && (
         <Card className="p-5">
-          <h3 className="font-semibold text-sm text-foreground mb-4">Cấu hình Demo</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+          <h3 className="font-semibold text-sm text-foreground mb-4">Thiết lập Kỳ thi</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Số bài thi</label>
-              <input type="number" value={submissionCount} onChange={e => setSubmissionCount(+e.target.value)}
-                className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm" min={10} max={5000} />
+              <label className="text-xs text-muted-foreground block mb-1">Số lượng bài thi</label>
+              <input
+                type="number" value={submissionCount}
+                onChange={e => setSubmissionCount(Math.max(10, Math.min(2000, +e.target.value)))}
+                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+                min={10} max={2000}
+              />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Loại bài</label>
-              <select value={examType} onChange={e => setExamType(e.target.value as ExamType)}
-                className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm">
+              <label className="text-xs text-muted-foreground block mb-1">Hình thức thi</label>
+              <select
+                value={examType}
+                onChange={e => setExamType(e.target.value as ExamType)}
+                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+              >
                 <option value="MCQ">Trắc nghiệm</option>
                 <option value="ESSAY">Tự luận</option>
-                <option value="MIXED">Hỗn hợp</option>
+                <option value="MIXED">Kết hợp (Trắc nghiệm + Tự luận)</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">MCQ Workers</label>
-              <input type="number" value={mcqWorkers} onChange={e => setMcqWorkers(+e.target.value)}
-                className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm" min={0} max={10} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Essay Workers</label>
-              <input type="number" value={essayWorkers} onChange={e => setEssayWorkers(+e.target.value)}
-                className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm" min={0} max={10} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Fraud Workers</label>
-              <input type="number" value={fraudWorkers} onChange={e => setFraudWorkers(+e.target.value)}
-                className="w-full px-3 py-1.5 rounded-md border border-input bg-background text-sm" min={0} max={5} />
-            </div>
             <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={enableFaults} onChange={e => setEnableFaults(e.target.checked)} 
-                  className="rounded" />
-                <span className="text-xs text-muted-foreground">Giả lập lỗi</span>
-              </label>
+              <p className="text-xs text-muted-foreground">
+                Hệ thống sẽ sử dụng kiến trúc Master-Slave với 3 MCQ Workers, 2 Essay Workers và 1 Fraud Worker để chấm bài song song.
+              </p>
             </div>
           </div>
         </Card>
@@ -188,7 +153,7 @@ export default function GradingDemo() {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
-              Tiến độ: {metrics.completedSubmissions}/{metrics.totalSubmissions} bài
+              {isRunning ? 'Đang chấm bài...' : 'Hoàn tất'} — {metrics.completedSubmissions}/{metrics.totalSubmissions} bài
             </span>
             <span className="text-muted-foreground font-mono">
               {(metrics.elapsedMs / 1000).toFixed(1)}s
@@ -198,169 +163,247 @@ export default function GradingDemo() {
         </div>
       )}
 
-      {/* Stats Row */}
-      {metrics && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          <StatCard icon={Database} label="Tổng Tasks" value={metrics.totalTasks} />
-          <StatCard icon={CheckCircle2} label="Hoàn thành" value={metrics.completedTasks} color="text-success" />
-          <StatCard icon={XCircle} label="Thất bại" value={metrics.failedTasks} color="text-destructive" />
-          <StatCard icon={Zap} label="Throughput" value={`${metrics.throughputPerMinute.toFixed(0)}/phút`} color="text-warning" />
-          <StatCard icon={Clock} label="Avg Latency" value={`${metrics.avgProcessingTimeMs.toFixed(0)}ms`} />
-          <StatCard icon={AlertTriangle} label="P95 Latency" value={`${metrics.p95LatencyMs.toFixed(0)}ms`} />
+      {/* Summary Stats - show after complete */}
+      {isComplete && metrics && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <SummaryCard
+            label="Tổng bài chấm"
+            value={String(metrics.completedSubmissions)}
+            sub={`${metrics.totalTasks} tasks xử lý`}
+            icon={<CheckCircle2 className="w-5 h-5 text-success" />}
+          />
+          <SummaryCard
+            label="Điểm trung bình"
+            value={avgScore.toFixed(2)}
+            sub="Thang điểm 10"
+            icon={<FileSearch className="w-5 h-5 text-primary" />}
+          />
+          <SummaryCard
+            label="Bài vi phạm"
+            value={String(violationSubs.length)}
+            sub={`${completedSubs.length > 0 ? ((violationSubs.length / completedSubs.length) * 100).toFixed(1) : 0}% tổng số`}
+            icon={<AlertTriangle className="w-5 h-5 text-warning" />}
+          />
+          <SummaryCard
+            label="Thời gian xử lý"
+            value={`${(metrics.elapsedMs / 1000).toFixed(1)}s`}
+            sub={`${metrics.throughputPerMinute.toFixed(0)} bài/phút`}
+            icon={<Play className="w-5 h-5 text-accent" />}
+          />
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Queue Stats */}
-        <Card className="p-5">
-          <h3 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
-            <Database className="w-4 h-4 text-primary" /> Redis Queues
-          </h3>
-          {queueStats ? (
-            <div className="space-y-3">
-              <QueueBar label="mcq_queue" count={queueStats.mcqQueue} max={submissionCount} color="bg-primary" />
-              <QueueBar label="essay_queue" count={queueStats.essayQueue} max={submissionCount} color="bg-accent" />
-              <QueueBar label="result_queue" count={queueStats.resultQueue} max={submissionCount} color="bg-success" />
-              <QueueBar label="dead_letter" count={queueStats.deadLetterQueue} max={submissionCount} color="bg-destructive" />
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Chưa khởi động</p>
+      {/* Results Tabs */}
+      {isComplete && completedSubs.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-1 border-b border-border">
+            <TabButton
+              active={activeTab === 'results'}
+              onClick={() => setActiveTab('results')}
+              icon={<FileSearch className="w-4 h-4" />}
+              label={`Kết quả chấm (${completedSubs.length})`}
+            />
+            <TabButton
+              active={activeTab === 'violations'}
+              onClick={() => setActiveTab('violations')}
+              icon={<Flag className="w-4 h-4" />}
+              label={`Vi phạm (${violationSubs.length})`}
+            />
+          </div>
+
+          {activeTab === 'results' && (
+            <ResultsTable submissions={completedSubs} examType={examType} />
           )}
-        </Card>
-
-        {/* Workers */}
-        <Card className="p-5">
-          <h3 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-accent" /> Workers
-          </h3>
-          <div className="space-y-2">
-            {workers.length > 0 ? workers.map(w => (
-              <div key={w.id} className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-muted/50">
-                <div className="flex items-center gap-2">
-                  <div className={`worker-indicator ${
-                    w.status === 'busy' ? 'bg-warning' : 
-                    w.status === 'idle' ? 'bg-success' : 
-                    w.status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground'
-                  }`} />
-                  <span className="font-mono">{w.id}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">{w.tasksProcessed} tasks</span>
-                  {w.isAlive ? (
-                    <button onClick={() => handleKillWorker(w.id)} className="text-destructive hover:text-destructive/80" title="Kill worker">
-                      <Skull className="w-3.5 h-3.5" />
-                    </button>
-                  ) : (
-                    <button onClick={() => handleReviveWorker(w.id)} className="text-success hover:text-success/80" title="Revive worker">
-                      <Heart className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )) : (
-              <p className="text-xs text-muted-foreground">Chưa khởi động</p>
-            )}
-          </div>
-        </Card>
-
-        {/* Event Log */}
-        <Card className="p-5">
-          <h3 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
-            <ArrowRight className="w-4 h-4 text-info" /> Event Log
-          </h3>
-          <div className="h-64 overflow-y-auto space-y-1 font-mono text-[10px]">
-            {events.length > 0 ? events.slice(-50).map((e, i) => (
-              <div key={i} className={`py-0.5 ${getEventColor(e.type)}`}>
-                <span className="text-muted-foreground">{new Date(e.timestamp).toLocaleTimeString()}</span>
-                {' '}{formatEvent(e)}
-              </div>
-            )) : (
-              <p className="text-xs text-muted-foreground">Chưa có sự kiện</p>
-            )}
-            <div ref={eventsEndRef} />
-          </div>
-        </Card>
-      </div>
-
-      {/* Complete Summary */}
-      {isComplete && metrics && (
-        <Card className="p-6 border-success/30 bg-success/5">
-          <div className="flex items-center gap-3 mb-4">
-            <CheckCircle2 className="w-6 h-6 text-success" />
-            <h3 className="font-semibold text-foreground">Hoàn thành!</h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground text-xs">Tổng thời gian</p>
-              <p className="font-bold text-foreground">{(metrics.elapsedMs / 1000).toFixed(2)}s</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">Throughput</p>
-              <p className="font-bold text-foreground">{metrics.throughputPerMinute.toFixed(0)} bài/phút</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">Avg Latency</p>
-              <p className="font-bold text-foreground">{metrics.avgProcessingTimeMs.toFixed(0)}ms</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">Tasks Retry</p>
-              <p className="font-bold text-foreground">{metrics.retriedTasks}</p>
-            </div>
-          </div>
-        </Card>
+          {activeTab === 'violations' && (
+            <ViolationsTable submissions={violationSubs} />
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string | number; color?: string }) {
+function SummaryCard({ label, value, sub, icon }: { label: string; value: string; sub: string; icon: React.ReactNode }) {
   return (
-    <div className="stat-card flex items-center gap-3">
-      <Icon className={`w-5 h-5 ${color || 'text-muted-foreground'}`} />
+    <Card className="p-4 flex items-start gap-3">
+      <div className="mt-0.5">{icon}</div>
       <div>
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-bold text-foreground text-lg animate-count-up">{value}</p>
+        <p className="text-xl font-bold text-foreground">{value}</p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
       </div>
-    </div>
+    </Card>
   );
 }
 
-function QueueBar({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
-  const pct = max > 0 ? Math.min((count / max) * 100, 100) : 0;
+function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-muted-foreground font-mono">{label}</span>
-        <span className="font-medium text-foreground">{count}</span>
-      </div>
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full transition-all duration-300`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+        active
+          ? 'border-primary text-primary'
+          : 'border-transparent text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      {icon} {label}
+    </button>
   );
 }
 
-function getEventColor(type: string): string {
-  if (type.includes('completed') || type === 'submission_completed') return 'text-success';
-  if (type.includes('failed') || type === 'dead_letter') return 'text-destructive';
-  if (type.includes('fault') || type.includes('stopped')) return 'text-warning';
-  if (type.includes('retried')) return 'text-warning';
-  return 'text-foreground';
+function ResultsTable({ submissions, examType }: { submissions: Submission[]; examType: ExamType }) {
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
+  const totalPages = Math.ceil(submissions.length / pageSize);
+  const pageSubs = submissions.slice(page * pageSize, (page + 1) * pageSize);
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/30">
+              <th className="text-left py-2.5 px-4 text-xs font-medium text-muted-foreground">STT</th>
+              <th className="text-left py-2.5 px-4 text-xs font-medium text-muted-foreground">Sinh viên</th>
+              <th className="text-left py-2.5 px-4 text-xs font-medium text-muted-foreground">Mã SV</th>
+              {(examType === 'MCQ' || examType === 'MIXED') && (
+                <th className="text-right py-2.5 px-4 text-xs font-medium text-muted-foreground">Điểm</th>
+              )}
+              {(examType === 'ESSAY' || examType === 'MIXED') && (
+                <th className="text-right py-2.5 px-4 text-xs font-medium text-muted-foreground">Đạo văn</th>
+              )}
+              <th className="text-center py-2.5 px-4 text-xs font-medium text-muted-foreground">Trạng thái</th>
+              <th className="text-center py-2.5 px-4 text-xs font-medium text-muted-foreground">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {pageSubs.map((sub, i) => (
+              <tr key={sub.id} className="hover:bg-muted/20">
+                <td className="py-2 px-4 text-xs text-muted-foreground">{page * pageSize + i + 1}</td>
+                <td className="py-2 px-4 text-sm font-medium text-foreground">{sub.studentName}</td>
+                <td className="py-2 px-4 text-xs text-muted-foreground font-mono">{sub.studentId.slice(-8)}</td>
+                {(examType === 'MCQ' || examType === 'MIXED') && (
+                  <td className="py-2 px-4 text-right">
+                    <span className={`font-bold ${(sub.score || 0) >= 5 ? 'text-success' : 'text-destructive'}`}>
+                      {(sub.score || 0).toFixed(2)}
+                    </span>
+                  </td>
+                )}
+                {(examType === 'ESSAY' || examType === 'MIXED') && (
+                  <td className="py-2 px-4 text-right">
+                    {sub.plagiarismScore !== undefined ? (
+                      <Badge variant={sub.plagiarismScore > 0.25 ? 'destructive' : 'secondary'} className="text-xs">
+                        {(sub.plagiarismScore * 100).toFixed(1)}%
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </td>
+                )}
+                <td className="py-2 px-4 text-center">
+                  {sub.fraudFlag ? (
+                    <Badge variant="destructive" className="text-xs gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Gian lận
+                    </Badge>
+                  ) : (sub.plagiarismScore && sub.plagiarismScore > 0.25) ? (
+                    <Badge variant="destructive" className="text-xs gap-1">
+                      <Flag className="w-3 h-3" /> Đạo văn
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">Hợp lệ</Badge>
+                  )}
+                </td>
+                <td className="py-2 px-4 text-center">
+                  <button className="text-muted-foreground hover:text-primary transition-colors" title="Xem chi tiết">
+                    <Eye className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+          <span className="text-xs text-muted-foreground">
+            Trang {page + 1}/{totalPages} ({submissions.length} bài)
+          </span>
+          <div className="flex gap-1">
+            <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+              Trước
+            </Button>
+            <Button size="sm" variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+              Sau
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
 }
 
-function formatEvent(e: EngineEvent): string {
-  switch (e.type) {
-    case 'submission_received': return `📥 Submission ${(e.data.submissionId as string).slice(-6)} → ${e.data.taskCount} tasks`;
-    case 'task_created': return `📋 Task ${(e.data.taskId as string).slice(-6)} [${e.data.type}]`;
-    case 'task_assigned': return `⚙️ ${e.data.workerId} ← task ${(e.data.taskId as string).slice(-6)}`;
-    case 'task_completed': return `✅ Task ${(e.data.taskId as string).slice(-6)} done (${e.data.processingTimeMs}ms)`;
-    case 'task_failed': return `❌ Task ${(e.data.taskId as string).slice(-6)} failed`;
-    case 'task_retried': return `🔄 Task ${(e.data.taskId as string).slice(-6)} retry #${e.data.retryCount}`;
-    case 'submission_completed': return `🎉 Sub ${(e.data.submissionId as string).slice(-6)} score=${typeof e.data.score === 'number' ? (e.data.score as number).toFixed(1) : 'N/A'}`;
-    case 'worker_started': return `🟢 Worker ${e.data.workerId} started`;
-    case 'worker_stopped': return `🔴 Worker ${e.data.workerId} stopped`;
-    case 'worker_fault': return `⚠️ Worker ${e.data.workerId} FAULT on task ${(e.data.taskId as string).slice(-6)}`;
-    case 'dead_letter': return `💀 Task ${(e.data.taskId as string).slice(-6)} → dead letter queue`;
-    default: return e.type;
+function ViolationsTable({ submissions }: { submissions: Submission[] }) {
+  if (submissions.length === 0) {
+    return (
+      <Card className="p-8 text-center">
+        <CheckCircle2 className="w-10 h-10 text-success mx-auto mb-3" />
+        <p className="text-foreground font-medium">Không phát hiện vi phạm</p>
+        <p className="text-muted-foreground text-sm mt-1">Tất cả bài thi đều hợp lệ</p>
+      </Card>
+    );
   }
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-destructive/5">
+              <th className="text-left py-2.5 px-4 text-xs font-medium text-muted-foreground">Sinh viên</th>
+              <th className="text-left py-2.5 px-4 text-xs font-medium text-muted-foreground">Loại vi phạm</th>
+              <th className="text-right py-2.5 px-4 text-xs font-medium text-muted-foreground">Mức độ</th>
+              <th className="text-center py-2.5 px-4 text-xs font-medium text-muted-foreground">Xử lý</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {submissions.map(sub => (
+              <tr key={sub.id} className="hover:bg-muted/20">
+                <td className="py-2.5 px-4">
+                  <p className="font-medium text-foreground text-sm">{sub.studentName}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{sub.studentId.slice(-8)}</p>
+                </td>
+                <td className="py-2.5 px-4">
+                  {sub.fraudFlag && (
+                    <Badge variant="destructive" className="text-xs mr-1">Gian lận</Badge>
+                  )}
+                  {sub.plagiarismScore && sub.plagiarismScore > 0.25 && (
+                    <Badge variant="destructive" className="text-xs">
+                      Đạo văn {(sub.plagiarismScore * 100).toFixed(1)}%
+                    </Badge>
+                  )}
+                </td>
+                <td className="py-2.5 px-4 text-right">
+                  <Badge variant={
+                    (sub.plagiarismScore || 0) > 0.5 || sub.fraudFlag ? 'destructive' : 'secondary'
+                  } className="text-xs">
+                    {(sub.plagiarismScore || 0) > 0.5 || sub.fraudFlag ? 'Nghiêm trọng' : 'Cần kiểm tra'}
+                  </Badge>
+                </td>
+                <td className="py-2.5 px-4 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <button className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Xem chi tiết bài làm">
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Xuất báo cáo">
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
 }
